@@ -199,15 +199,18 @@ class TestResetHandler:
         """Test /reset command successfully clears conversation."""
         MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
         
-        # Create an in-memory database for testing
+        # Create an in-memory database for testing, with the checkpoints
+        # table created the same way SqliteSaver creates it in production
         test_conn = sqlite3.connect(":memory:", check_same_thread=False)
-        
+        from langgraph.checkpoint.sqlite import SqliteSaver
+        SqliteSaver(test_conn).setup()
+
         mock_update = AsyncMock()
         mock_update.effective_user.id = MY_TELEGRAM_USER_ID
         mock_update.message.reply_text = AsyncMock()
-        
+
         mock_context = AsyncMock()
-        
+
         # Mock the sqlite_conn in the agent module
         with patch('agent.sqlite_conn', test_conn):
             from agent import reset_conversation
@@ -311,6 +314,98 @@ class TestMessageHandler:
         
         assert expected_thread_id.startswith("chat_")
         assert user_id_str in expected_thread_id
+
+
+class TestVoiceMessageHandler:
+    """Test the voice message handling function."""
+
+    @pytest.mark.asyncio
+    async def test_handle_voice_authorized_user(self):
+        """Test voice message handling with authorized user."""
+        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+
+        mock_update = AsyncMock()
+        mock_update.effective_user.id = MY_TELEGRAM_USER_ID
+        mock_update.message.voice.file_id = "test_file_id"
+        mock_update.message.voice.duration = 3.5
+        mock_update.message.voice.mime_type = "audio/ogg"
+        mock_update.message.chat.send_action = AsyncMock()
+        mock_update.message.reply_text = AsyncMock()
+
+        mock_telegram_file = AsyncMock()
+        mock_telegram_file.download_as_bytearray = AsyncMock(return_value=bytearray(b"fake audio bytes"))
+
+        mock_context = AsyncMock()
+        mock_context.bot.get_file = AsyncMock(return_value=mock_telegram_file)
+
+        with patch('agent.agent_executor') as mock_executor:
+            mock_executor.invoke = MagicMock(return_value={
+                "messages": [
+                    MagicMock(content="I heard your voice message!")
+                ]
+            })
+
+            from agent import handle_voice_message
+
+            await handle_voice_message(mock_update, mock_context)
+
+            # Verify the audio was downloaded
+            mock_context.bot.get_file.assert_called_once_with("test_file_id")
+
+            # Verify typing indicator was sent
+            mock_update.message.chat.send_action.assert_called_once_with("typing")
+
+            # Verify the agent was invoked with a file content block
+            invoke_args = mock_executor.invoke.call_args[0][0]
+            content_blocks = invoke_args["messages"][0]["content"]
+            assert any(block.get("type") == "file" for block in content_blocks)
+            assert any(block.get("mime_type") == "audio/ogg" for block in content_blocks)
+
+            # Verify reply was sent
+            mock_update.message.reply_text.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_voice_unauthorized_user(self):
+        """Test voice message handling with unauthorized user."""
+        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+
+        mock_update = AsyncMock()
+        mock_update.effective_user.id = MY_TELEGRAM_USER_ID + 99999
+        mock_update.message.reply_text = AsyncMock()
+
+        mock_context = AsyncMock()
+
+        from agent import handle_voice_message
+
+        await handle_voice_message(mock_update, mock_context)
+
+        # Verify access denied message and no download attempted
+        call_args = mock_update.message.reply_text.call_args[0][0]
+        assert "Access denied" in call_args or "❌" in call_args
+        mock_context.bot.get_file.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handle_voice_download_failure(self):
+        """Test voice message handling when downloading the audio fails."""
+        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+
+        mock_update = AsyncMock()
+        mock_update.effective_user.id = MY_TELEGRAM_USER_ID
+        mock_update.message.voice.file_id = "test_file_id"
+        mock_update.message.voice.duration = 2.0
+        mock_update.message.voice.mime_type = "audio/ogg"
+        mock_update.message.chat.send_action = AsyncMock()
+        mock_update.message.reply_text = AsyncMock()
+
+        mock_context = AsyncMock()
+        mock_context.bot.get_file = AsyncMock(side_effect=Exception("Network error"))
+
+        from agent import handle_voice_message
+
+        await handle_voice_message(mock_update, mock_context)
+
+        call_args = mock_update.message.reply_text.call_args[0][0]
+        assert "error" in call_args.lower() or "❌" in call_args
 
 
 class TestSystemPrompt:

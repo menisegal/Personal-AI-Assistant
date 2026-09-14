@@ -12,6 +12,7 @@ Features:
 - Async message handling with typing indicators
 """
 
+import base64
 import logging
 import os
 import sqlite3
@@ -145,7 +146,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 /reset - Clear conversation history
 
 **How to use:**
-Simply send any message and I'll respond as your personal smart assistant!
+Simply send any message (text or 🎤 voice note) and I'll respond as your personal smart assistant!
 Your conversation history is automatically saved and persists across restarts.
 """
     await update.message.reply_text(help_text, parse_mode="Markdown")
@@ -215,44 +216,27 @@ async def send_long_message(message, text: str) -> None:
         await message.reply_text(text[i:i + TELEGRAM_MAX_MESSAGE_LENGTH])
 
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def run_agent_and_reply(update: Update, user_id: str, thread_id: str, content) -> None:
     """
-    Main message handler for user input.
-    
-    Processes incoming text messages and generates responses using the LangGraph agent.
-    Maintains conversation context using persistent SQLite memory with unique thread IDs.
-    
-    Only responds if the sender is the authorized user.
+    Invoke the LangGraph agent with the given message content and send the response to Telegram.
+
+    `content` may be a plain string (text message) or a list of LangChain content
+    blocks (e.g. text + audio file), as accepted by the agent's message format.
     """
-    # Security check: only respond to authorized user
-    if update.effective_user.id != MY_TELEGRAM_USER_ID:
-        await update.message.reply_text("❌ Access denied.")
-        logger.warning("Unauthorized access attempt from user: %s", update.effective_user.id)
-        return
-
-    user_message = update.message.text
-    user_id = str(update.effective_user.id)
-    thread_id = f"chat_{user_id}"  # Persistent thread ID for conversation history
-
-    logger.info("Message received from user %s: %s...", user_id, user_message[:50])
-    
-    # Show typing indicator to indicate the bot is processing
-    await update.message.chat.send_action("typing")
-    
     try:
         # Invoke the agent with the user message
         # The thread_id ensures conversation history is loaded from SQLite
         response = agent_executor.invoke(
-            {"messages": [{"role": "user", "content": user_message}]},
+            {"messages": [{"role": "user", "content": content}]},
             config={"configurable": {"thread_id": thread_id}}
         )
-        
+
         # Extract the final response from the agent
         # The response contains the entire conversation state
         if "messages" in response and response["messages"]:
             # Get the last message from the response
             last_message = response["messages"][-1]
-            
+
             # Handle both content strings and message objects
             if isinstance(last_message, str):
                 agent_response = last_message
@@ -276,6 +260,84 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         error_msg = f"An error occurred: {str(e)}"
         logger.error(error_msg)
         await update.message.reply_text(f"❌ {error_msg}")
+
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Main message handler for text input.
+
+    Processes incoming text messages and generates responses using the LangGraph agent.
+    Maintains conversation context using persistent SQLite memory with unique thread IDs.
+
+    Only responds if the sender is the authorized user.
+    """
+    # Security check: only respond to authorized user
+    if update.effective_user.id != MY_TELEGRAM_USER_ID:
+        await update.message.reply_text("❌ Access denied.")
+        logger.warning("Unauthorized access attempt from user: %s", update.effective_user.id)
+        return
+
+    user_message = update.message.text
+    user_id = str(update.effective_user.id)
+    thread_id = f"chat_{user_id}"  # Persistent thread ID for conversation history
+
+    logger.info("Message received from user %s: %s...", user_id, user_message[:50])
+
+    # Show typing indicator to indicate the bot is processing
+    await update.message.chat.send_action("typing")
+
+    await run_agent_and_reply(update, user_id, thread_id, user_message)
+
+
+async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Voice message handler.
+
+    Downloads the Telegram voice note and sends the raw audio straight to Gemini
+    (no separate speech-to-text step needed), then replies with the agent's response.
+
+    Only responds if the sender is the authorized user.
+    """
+    # Security check: only respond to authorized user
+    if update.effective_user.id != MY_TELEGRAM_USER_ID:
+        await update.message.reply_text("❌ Access denied.")
+        logger.warning("Unauthorized access attempt from user: %s", update.effective_user.id)
+        return
+
+    user_id = str(update.effective_user.id)
+    thread_id = f"chat_{user_id}"
+    voice = update.message.voice
+
+    logger.info("Voice message received from user %s (%.1fs)", user_id, voice.duration)
+
+    # Show typing indicator to indicate the bot is processing
+    await update.message.chat.send_action("typing")
+
+    try:
+        telegram_file = await context.bot.get_file(voice.file_id)
+        audio_bytes = bytes(await telegram_file.download_as_bytearray())
+        audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+        mime_type = voice.mime_type or "audio/ogg"
+    except Exception as e:
+        error_msg = f"Failed to download voice message: {str(e)}"
+        logger.error(error_msg)
+        await update.message.reply_text(f"❌ {error_msg}")
+        return
+
+    content = [
+        {
+            "type": "text",
+            "text": "Listen to this voice message and respond to it as you would to a text message.",
+        },
+        {
+            "type": "file",
+            "source_type": "base64",
+            "mime_type": mime_type,
+            "data": audio_base64,
+        },
+    ]
+
+    await run_agent_and_reply(update, user_id, thread_id, content)
 
 # ============================================================================
 # BOT INITIALIZATION & MAIN LOOP
@@ -301,6 +363,9 @@ def main() -> None:
     
     # Register message handler for all text messages (excluding commands)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Register message handler for voice notes
+    application.add_handler(MessageHandler(filters.VOICE, handle_voice_message))
     
     logger.info("✅ All handlers registered")
     logger.info("🚀 Starting bot polling... (Press Ctrl+C to stop)")
