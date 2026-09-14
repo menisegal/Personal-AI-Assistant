@@ -69,18 +69,44 @@ The bot will start polling for messages. When running, it will only respond to m
 
 ## Deployment on Raspberry Pi
 
-The bot is lightweight and can run on a Raspberry Pi:
+The bot is lightweight and can run on a Raspberry Pi. A deploy tool (`deploy/deploy.py`)
+automates this over SSH: it syncs the project, sets up the venv on the Pi, and
+(optionally) installs a `systemd` service so the bot survives reboots and crashes.
 
-1. Install Python 3.8+ on your Raspberry Pi
-2. Follow the setup steps above
-3. (Optional) Use `systemd` or `screen` to keep the bot running in the background
+### Prerequisites on the Pi
 
-Example with `screen`:
+- Python 3.8+ with `python3-venv` (`sudo apt install python3 python3-venv`)
+- SSH access enabled (`sudo raspi-config` → Interface Options → SSH)
+
+### One-time local setup
 
 ```bash
-screen -S telegram-bot
-python agent.py
-# Press Ctrl+A then D to detach
+cp deploy/deploy.env.example deploy/deploy.env
+# edit deploy/deploy.env with your Pi's host/user/path
+```
+
+### Deploy
+
+```bash
+# Sync code, create/update the venv, install dependencies
+python deploy/deploy.py --host raspberrypi.local --user pi
+
+# Also install/refresh a systemd service so the bot auto-starts and restarts on failure
+python deploy/deploy.py --host raspberrypi.local --user pi --service
+```
+
+Useful flags: `--path` (remote directory, must be absolute for `--service`), `--key`
+(SSH private key), `--port` (SSH port), `--skip-env` (don't copy your local `.env`),
+`--restart-only` (just restart the already-installed service after you change `.env` by hand).
+
+Connection details can instead live in `deploy/deploy.env` (gitignored) so you don't
+have to pass flags every time — see `deploy/deploy.env.example`.
+
+Check on it remotely:
+
+```bash
+ssh pi@raspberrypi.local sudo systemctl status personal-ai-assistant
+ssh pi@raspberrypi.local sudo journalctl -u personal-ai-assistant -f
 ```
 
 ## File Structure
@@ -91,6 +117,10 @@ Personal-AI-Assistant/
 ├── requirements.txt      # Python dependencies
 ├── .env.example         # Template for environment variables
 ├── .gitignore           # Git ignore rules
+├── deploy/              # Raspberry Pi deploy tool (see Deployment section)
+│   ├── deploy.py
+│   ├── deploy.env.example
+│   └── personal-ai-assistant.service.template
 └── README.md            # This file
 ```
 

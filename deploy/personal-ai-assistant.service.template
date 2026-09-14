@@ -1,0 +1,15 @@
+[Unit]
+Description=Personal AI Assistant Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={user}
+WorkingDirectory={remote_path}
+ExecStart={remote_path}/venv/bin/python {remote_path}/agent.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

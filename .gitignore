@@ -27,3 +27,8 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+memory.db
+
+# Deploy tool local config (contains SSH connection details)
+deploy/deploy.env
+deploy/*.service
