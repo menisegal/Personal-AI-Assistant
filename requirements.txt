@@ -3,4 +3,7 @@ python-dotenv==1.0.1
 langchain==1.4.0
 langchain-google-genai==4.4.0
 langgraph~=1.2
-langgraph-checkpoint-sqlite~=3.1
+# langgraph-checkpoint-sqlite itself is installed separately via
+# requirements-no-deps.txt (see that file for why). aiosqlite is its only
+# real runtime dependency.
+aiosqlite==0.22.1

@@ -101,12 +101,13 @@ def copy_env_file(target: str, remote_path: str, scp_args: list) -> None:
     run(["scp"] + scp_args + [str(env_path), f"{target}:{remote_path}/.env"])
 
 
-def remote_setup(target: str, remote_path: str, ssh_args: list) -> None:
-    print("[STEP] Creating/updating virtual environment and installing dependencies on the Pi")
+def remote_setup(target: str, remote_path: str, ssh_args: list, python_bin: str) -> None:
+    print(f"[STEP] Creating/updating virtual environment (using {python_bin}) and installing dependencies on the Pi")
     remote_cmd = (
         f"cd {remote_path} && "
-        "python3 -m venv venv && "
+        f"{python_bin} -m venv venv && "
         "venv/bin/pip install --upgrade pip && "
+        "venv/bin/pip install --no-deps -r requirements-no-deps.txt && "
         "venv/bin/pip install -r requirements.txt"
     )
     run(["ssh"] + ssh_args + [target, remote_cmd])
@@ -161,6 +162,9 @@ def main():
     parser.add_argument("--key", default=env_config.get("PI_SSH_KEY"), help="Path to SSH private key")
     parser.add_argument("--path", default=env_config.get("PI_REMOTE_PATH", "~/personal-ai-assistant"),
                          help="Remote directory to deploy into")
+    parser.add_argument("--python-bin", default=env_config.get("PYTHON_BIN", "python3"),
+                         help="Python interpreter on the Pi used to create the venv "
+                              "(e.g. /data/python3.11/bin/python3.11 for a custom-built version)")
     parser.add_argument("--service-name", default=env_config.get("SERVICE_NAME", "personal-ai-assistant"),
                          help="systemd service name")
     parser.add_argument("--service", action="store_true",
@@ -194,7 +198,7 @@ def main():
             if not args.skip_env:
                 copy_env_file(target, args.path, scp_args)
 
-        remote_setup(target, args.path, ssh_args)
+        remote_setup(target, args.path, ssh_args, args.python_bin)
 
         if args.service:
             install_service(target, args.path, ssh_args, scp_args, args.service_name, args.user)

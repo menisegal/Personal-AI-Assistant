@@ -1,0 +1,9 @@
+# Installed with `pip install --no-deps -r requirements-no-deps.txt`.
+#
+# langgraph-checkpoint-sqlite declares a hard dependency on sqlite-vec (a C
+# extension for vector search) that its own SqliteSaver code never actually
+# imports or uses. sqlite-vec has no published wheel for 32-bit ARM
+# (armv7l/Raspberry Pi), which makes plain `pip install` unresolvable there.
+# Installing this package with --no-deps skips that unused dependency.
+# Its one real runtime dependency, aiosqlite, is listed in requirements.txt.
+langgraph-checkpoint-sqlite==3.1.1

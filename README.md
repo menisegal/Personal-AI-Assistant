@@ -40,8 +40,11 @@ venv\Scripts\activate
 ### 3. Install Dependencies
 
 ```bash
+pip install --no-deps -r requirements-no-deps.txt
 pip install -r requirements.txt
 ```
+
+(The first command installs `langgraph-checkpoint-sqlite` without its declared-but-unused `sqlite-vec` dependency — see the comments in `requirements-no-deps.txt` for why.)
 
 ### 4. Configure Environment Variables
 
