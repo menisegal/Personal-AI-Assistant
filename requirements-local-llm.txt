@@ -1,0 +1,8 @@
+# Only needed when LLM_PROVIDER=local (running a GGUF model on-device via llama.cpp).
+# Not part of requirements.txt because llama-cpp-python ships as a source
+# tarball (no prebuilt wheels) and compiles a large C++ codebase — this would
+# slow down/break installs on machines that only ever use the Gemini backend
+# (local Windows dev, CI). Install with:
+#   pip install -r requirements-local-llm.txt
+langchain-community==0.4.2
+llama-cpp-python==0.3.35

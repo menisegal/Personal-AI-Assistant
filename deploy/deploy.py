@@ -101,7 +101,7 @@ def copy_env_file(target: str, remote_path: str, scp_args: list) -> None:
     run(["scp"] + scp_args + [str(env_path), f"{target}:{remote_path}/.env"])
 
 
-def remote_setup(target: str, remote_path: str, ssh_args: list, python_bin: str) -> None:
+def remote_setup(target: str, remote_path: str, ssh_args: list, python_bin: str, local_llm: bool) -> None:
     print(f"[STEP] Creating/updating virtual environment (using {python_bin}) and installing dependencies on the Pi")
     remote_cmd = (
         f"cd {remote_path} && "
@@ -110,11 +110,20 @@ def remote_setup(target: str, remote_path: str, ssh_args: list, python_bin: str)
         "venv/bin/pip install --no-deps -r requirements-no-deps.txt && "
         "venv/bin/pip install -r requirements.txt"
     )
+    if local_llm:
+        print("[STEP] Installing local-LLM dependencies (this compiles llama.cpp from source, can take a while)")
+        # --no-binary llama-cpp-python: prebuilt wheels (e.g. from piwheels) may be
+        # linked against a newer glibc than an older Raspberry Pi OS ships, causing
+        # a GLIBC_2.xx not found error at import time. Building from source links
+        # against whatever glibc is actually on the device.
+        remote_cmd += (
+            " && venv/bin/pip install --no-binary llama-cpp-python -r requirements-local-llm.txt"
+        )
     run(["ssh"] + ssh_args + [target, remote_cmd])
 
 
 def install_service(target: str, remote_path: str, ssh_args: list, scp_args: list,
-                     service_name: str, user: str) -> None:
+                     service_name: str, user: str, ld_preload: str) -> None:
     if remote_path.startswith("~"):
         raise ValueError(
             "--path must be an absolute path when using --service "
@@ -127,6 +136,7 @@ def install_service(target: str, remote_path: str, ssh_args: list, scp_args: lis
     rendered = template.format(
         remote_path=remote_path,
         user=user or "pi",
+        ld_preload_line=f"Environment=LD_PRELOAD={ld_preload}" if ld_preload else "",
     )
 
     tmp_service_path = DEPLOY_DIR / f"{service_name}.service"
@@ -175,6 +185,12 @@ def main():
                          help="Skip file sync (only re-run setup/service steps)")
     parser.add_argument("--restart-only", action="store_true",
                          help="Skip sync/setup/service install; just restart the running service")
+    parser.add_argument("--local-llm", action="store_true",
+                         help="Also install requirements-local-llm.txt (llama-cpp-python + langchain-community) "
+                              "for running a local GGUF model. Compiles from source, can take a while.")
+    parser.add_argument("--ld-preload", default=env_config.get("LD_PRELOAD"),
+                         help="Value for the service's LD_PRELOAD env var (e.g. a libatomic.so path needed "
+                              "for llama-cpp-python on 32-bit ARM). Only applied with --service.")
     args = parser.parse_args()
 
     if not args.host:
@@ -198,10 +214,10 @@ def main():
             if not args.skip_env:
                 copy_env_file(target, args.path, scp_args)
 
-        remote_setup(target, args.path, ssh_args, args.python_bin)
+        remote_setup(target, args.path, ssh_args, args.python_bin, args.local_llm)
 
         if args.service:
-            install_service(target, args.path, ssh_args, scp_args, args.service_name, args.user)
+            install_service(target, args.path, ssh_args, scp_args, args.service_name, args.user, args.ld_preload)
         else:
             print("[INFO] Skipping systemd service install (pass --service to enable it).")
             print(f"[INFO] To run manually: ssh {target} \"cd {args.path} && venv/bin/python agent.py\"")

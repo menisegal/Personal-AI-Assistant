@@ -45,13 +45,23 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 MY_TELEGRAM_USER_ID_STR = os.getenv("MY_TELEGRAM_USER_ID")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
+# LLM_PROVIDER selects which model backend to use:
+#   "gemini" (default) - Google's Gemini API, requires GOOGLE_API_KEY
+#   "local"             - a local GGUF model via llama.cpp, requires LOCAL_LLM_MODEL_PATH
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini").lower()
+LOCAL_LLM_MODEL_PATH = os.getenv("LOCAL_LLM_MODEL_PATH")
+
 # Validate that all required environment variables are present
 if not TELEGRAM_BOT_TOKEN:
     raise ValueError("Missing TELEGRAM_BOT_TOKEN in .env file")
 if not MY_TELEGRAM_USER_ID_STR:
     raise ValueError("Missing MY_TELEGRAM_USER_ID in .env file")
-if not GOOGLE_API_KEY:
-    raise ValueError("Missing GOOGLE_API_KEY in .env file")
+if LLM_PROVIDER == "gemini" and not GOOGLE_API_KEY:
+    raise ValueError("Missing GOOGLE_API_KEY in .env file (required when LLM_PROVIDER=gemini)")
+if LLM_PROVIDER == "local" and not LOCAL_LLM_MODEL_PATH:
+    raise ValueError("Missing LOCAL_LLM_MODEL_PATH in .env file (required when LLM_PROVIDER=local)")
+if LLM_PROVIDER not in ("gemini", "local"):
+    raise ValueError(f"Invalid LLM_PROVIDER: {LLM_PROVIDER!r} (expected 'gemini' or 'local')")
 
 # Convert user ID to integer for comparison
 try:
@@ -79,10 +89,24 @@ except Exception as e:
 # LLM & AGENT SETUP
 # ============================================================================
 
-# Initialize the LLM with Google's Gemini Flash model
-llm = ChatGoogleGenerativeAI(model="gemini-3.6-flash", api_key=GOOGLE_API_KEY)
+if LLM_PROVIDER == "local":
+    # Imported lazily: langchain-community and llama-cpp-python are only
+    # required when actually running a local model (they compile a large
+    # C++ codebase from source and aren't needed for the Gemini path).
+    from langchain_community.chat_models import ChatLlamaCpp
 
-logger.info("✅ ChatGoogleGenerativeAI initialized with gemini-3.6-flash")
+    llm = ChatLlamaCpp(
+        model_path=LOCAL_LLM_MODEL_PATH,
+        n_ctx=int(os.getenv("LOCAL_LLM_N_CTX", "4096")),
+        n_threads=int(os.getenv("LOCAL_LLM_N_THREADS", "4")),
+        max_tokens=512,
+        temperature=0.7,
+        verbose=False,
+    )
+    logger.info("✅ ChatLlamaCpp initialized with local model: %s", LOCAL_LLM_MODEL_PATH)
+else:
+    llm = ChatGoogleGenerativeAI(model="gemini-3.6-flash", api_key=GOOGLE_API_KEY)
+    logger.info("✅ ChatGoogleGenerativeAI initialized with gemini-3.6-flash")
 
 # System prompt that defines the agent's behavior and personality
 SYSTEM_PROMPT = """You are a personal smart assistant designed to help the user with a wide range of tasks.

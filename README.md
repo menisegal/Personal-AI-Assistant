@@ -100,7 +100,20 @@ python deploy/deploy.py --host raspberrypi.local --user pi --service
 
 Useful flags: `--path` (remote directory, must be absolute for `--service`), `--key`
 (SSH private key), `--port` (SSH port), `--skip-env` (don't copy your local `.env`),
-`--restart-only` (just restart the already-installed service after you change `.env` by hand).
+`--restart-only` (just restart the already-installed service after you change `.env` by hand),
+`--python-bin` (use a specific Python interpreter on the Pi, e.g. a custom-built one if the
+system `python3` is too old), `--local-llm` (also install `requirements-local-llm.txt` for
+running a local model — see below).
+
+### Running a local LLM instead of Gemini
+
+Set `LLM_PROVIDER=local` and `LOCAL_LLM_MODEL_PATH=/path/to/model.gguf` in `.env` to run a
+local GGUF model via `llama.cpp` instead of calling the Gemini API — useful for keeping
+everything on-device. This requires `requirements-local-llm.txt` (`llama-cpp-python` +
+`langchain-community`), which compiles from source and is *not* part of the default
+install. On the Pi, deploy with `python deploy/deploy.py --service --local-llm`, and make
+sure `cmake` is installed (`sudo apt install cmake`) before the first run. Expect much
+slower responses than Gemini on constrained hardware (e.g. 32-bit Raspberry Pi).
 
 Connection details can instead live in `deploy/deploy.env` (gitignored) so you don't
 have to pass flags every time — see `deploy/deploy.env.example`.

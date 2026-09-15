@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 User={user}
 WorkingDirectory={remote_path}
+{ld_preload_line}
 ExecStart={remote_path}/venv/bin/python {remote_path}/agent.py
 Restart=on-failure
 RestartSec=5
