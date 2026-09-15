@@ -23,6 +23,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.checkpoint.sqlite import SqliteSaver
 import langchain.agents
 
+from tools.ticket_search import search_event_tickets
+
 # ============================================================================
 # LOGGING SETUP
 # ============================================================================
@@ -114,13 +116,22 @@ You are intelligent, helpful, and always aim to provide accurate and thoughtful 
 You have access to various tools and can help with information retrieval, planning, analysis, and more.
 Be conversational, friendly, and adapt your tone to the user's needs.
 
+You can search the web for tickets to sports games, shows, concerts, and other events using
+the search_event_tickets tool whenever the user asks about buying tickets or an event's schedule.
+The tool returns real page content, not just search snippets — read it carefully and report
+actual prices, dates, and seat availability when you find them, always including the direct
+purchase link. If a page's content doesn't contain clear pricing, say so explicitly rather than
+guessing, and point the user to the link so they can check themselves.
+
 Important: Always maintain context from previous messages and build upon the conversation history."""
+
+AGENT_TOOLS = [search_event_tickets]
 
 # Create the ReAct agent with persistent SqliteSaver checkpointer
 # This ensures conversation history is saved to SQLite and restored on restart
 agent_executor = langchain.agents.create_agent(
     model=llm,
-    tools=[],  # Add tools here as needed (e.g., web search, calculator, etc.)
+    tools=AGENT_TOOLS,
     checkpointer=memory_saver,  # Use SqliteSaver for persistent memory
     system_prompt=SYSTEM_PROMPT
 )
