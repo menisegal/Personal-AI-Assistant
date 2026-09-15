@@ -107,6 +107,12 @@ Useful flags: `--path` (remote directory, must be absolute for `--service`), `--
 system `python3` is too old), `--local-llm` (also install `requirements-local-llm.txt` for
 running a local model — see below).
 
+### Using Claude instead of Gemini
+
+Set `LLM_PROVIDER=claude` and `ANTHROPIC_API_KEY=your_key` in `.env` to run the bot on
+Anthropic's Claude API instead of Gemini. No extra deploy steps needed — it's already in
+`requirements.txt`.
+
 ### Running a local LLM instead of Gemini
 
 Set `LLM_PROVIDER=local` and `LOCAL_LLM_MODEL_PATH=/path/to/model.gguf` in `.env` to run a

@@ -47,12 +47,16 @@ load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 MY_TELEGRAM_USER_ID_STR = os.getenv("MY_TELEGRAM_USER_ID")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 # LLM_PROVIDER selects which model backend to use:
 #   "gemini" (default) - Google's Gemini API, requires GOOGLE_API_KEY
+#   "claude"            - Anthropic's Claude API, requires ANTHROPIC_API_KEY
 #   "local"             - a local GGUF model via llama.cpp, requires LOCAL_LLM_MODEL_PATH
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini").lower()
 LOCAL_LLM_MODEL_PATH = os.getenv("LOCAL_LLM_MODEL_PATH")
+
+VALID_LLM_PROVIDERS = ("gemini", "claude", "local")
 
 # Validate that all required environment variables are present
 if not TELEGRAM_BOT_TOKEN:
@@ -61,10 +65,12 @@ if not MY_TELEGRAM_USER_ID_STR:
     raise ValueError("Missing MY_TELEGRAM_USER_ID in .env file")
 if LLM_PROVIDER == "gemini" and not GOOGLE_API_KEY:
     raise ValueError("Missing GOOGLE_API_KEY in .env file (required when LLM_PROVIDER=gemini)")
+if LLM_PROVIDER == "claude" and not ANTHROPIC_API_KEY:
+    raise ValueError("Missing ANTHROPIC_API_KEY in .env file (required when LLM_PROVIDER=claude)")
 if LLM_PROVIDER == "local" and not LOCAL_LLM_MODEL_PATH:
     raise ValueError("Missing LOCAL_LLM_MODEL_PATH in .env file (required when LLM_PROVIDER=local)")
-if LLM_PROVIDER not in ("gemini", "local"):
-    raise ValueError(f"Invalid LLM_PROVIDER: {LLM_PROVIDER!r} (expected 'gemini' or 'local')")
+if LLM_PROVIDER not in VALID_LLM_PROVIDERS:
+    raise ValueError(f"Invalid LLM_PROVIDER: {LLM_PROVIDER!r} (expected one of {VALID_LLM_PROVIDERS})")
 
 # Convert user ID to integer for comparison
 try:
@@ -107,6 +113,11 @@ if LLM_PROVIDER == "local":
         verbose=False,
     )
     logger.info("✅ ChatLlamaCpp initialized with local model: %s", LOCAL_LLM_MODEL_PATH)
+elif LLM_PROVIDER == "claude":
+    from langchain_anthropic import ChatAnthropic
+
+    llm = ChatAnthropic(model="claude-sonnet-5", api_key=ANTHROPIC_API_KEY)
+    logger.info("✅ ChatAnthropic initialized with claude-sonnet-5")
 else:
     llm = ChatGoogleGenerativeAI(model="gemini-3.6-flash", api_key=GOOGLE_API_KEY)
     logger.info("✅ ChatGoogleGenerativeAI initialized with gemini-3.6-flash")
