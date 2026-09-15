@@ -24,6 +24,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 import langchain.agents
 
 from tools.ticket_search import search_event_tickets
+from tools.job_search import search_linkedin_jobs
 
 # ============================================================================
 # LOGGING SETUP
@@ -123,9 +124,14 @@ actual prices, dates, and seat availability when you find them, always including
 purchase link. If a page's content doesn't contain clear pricing, say so explicitly rather than
 guessing, and point the user to the link so they can check themselves.
 
+You can search for LinkedIn job postings using the search_linkedin_jobs tool whenever the user
+asks about job openings or career opportunities. Note this searches public listings via a web
+search engine, not a direct LinkedIn API, so always include the links so the user can view the
+full posting (LinkedIn may require sign-in to see complete details).
+
 Important: Always maintain context from previous messages and build upon the conversation history."""
 
-AGENT_TOOLS = [search_event_tickets]
+AGENT_TOOLS = [search_event_tickets, search_linkedin_jobs]
 
 # Create the ReAct agent with persistent SqliteSaver checkpointer
 # This ensures conversation history is saved to SQLite and restored on restart
