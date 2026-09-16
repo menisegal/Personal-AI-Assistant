@@ -223,9 +223,14 @@ async def reset_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     thread_id = f"chat_{user_id}"
 
     try:
-        # Delete the conversation history from the database
+        # Delete the conversation history from the database.
+        # SqliteSaver spreads a thread's state across both the checkpoints table
+        # (saved checkpoints) and the writes table (pending/intermediate writes) —
+        # clearing only checkpoints leaves writes behind, which get merged back in
+        # on the next turn and silently resurrect "deleted" history.
         cursor = sqlite_conn.cursor()
         cursor.execute("DELETE FROM checkpoints WHERE thread_id = ?", (thread_id,))
+        cursor.execute("DELETE FROM writes WHERE thread_id = ?", (thread_id,))
         sqlite_conn.commit()
 
         await update.message.reply_text("🔄 Conversation history cleared. Starting fresh!")
