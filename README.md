@@ -4,10 +4,13 @@ A personal Telegram bot powered by Google's Gemini AI, built with LangGraph for 
 
 ## Features
 
-- 🤖 **Intelligent Assistant**: Powered by Gemini for fast and capable responses (or a local GGUF model, see below)
-- 💬 **Conversation Memory**: Maintains user session history with LangGraph
+- 🤖 **Intelligent Assistant**: Powered by Gemini for fast and capable responses (or Claude/a local GGUF model, see below)
+- 👥 **Multi-User**: More than one person can use the bot, each in their own private conversation
+- 💬 **Conversation Memory**: Maintains per-user session history with LangGraph
+- ✅ **Shared Task List**: A household to-do list everyone shares — unlike chat history, it survives `/reset`
 - 🎤 **Voice Messages**: Send voice notes, transcribed and understood natively by Gemini
 - 🎫 **Event Ticket Search**: Ask about tickets for a game, concert, or show — the agent searches the web and reads real ticket pages for prices and links
+- 💼 **Job Search**: Ask about LinkedIn job openings — searched via a public search engine, no LinkedIn login required
 - 🔐 **Secure**: Credentials managed via environment variables, not hardcoded
 - 🚀 **Lightweight**: Can run on Raspberry Pi or any Python-compatible machine
 
@@ -60,9 +63,13 @@ Edit `.env` and add your credentials:
 
 ```
 TELEGRAM_BOT_TOKEN=your_bot_token_here
-MY_TELEGRAM_USER_ID=your_user_id_here
+AUTHORIZED_USERS=your_user_id_here:YourName
 GOOGLE_API_KEY=your_google_api_key_here
 ```
+
+`AUTHORIZED_USERS` is a comma-separated list of `telegram_user_id:Name` entries — add more
+people by appending more entries (e.g. `111111111:Alice,222222222:Bob`). Everyone listed can
+use the bot in their own private conversation, and they all share the same task list (see below).
 
 ### 5. Run the Bot
 
@@ -70,7 +77,7 @@ GOOGLE_API_KEY=your_google_api_key_here
 python agent.py
 ```
 
-The bot will start polling for messages. When running, it will only respond to messages from the user ID specified in `MY_TELEGRAM_USER_ID`.
+The bot will start polling for messages. It will only respond to messages from user IDs listed in `AUTHORIZED_USERS`.
 
 ## Deployment on Raspberry Pi
 
@@ -138,8 +145,10 @@ ssh pi@raspberrypi.local sudo journalctl -u personal-ai-assistant -f
 ```
 Personal-AI-Assistant/
 ├── agent.py              # Main bot logic
-├── tools/                # Agent tools (web search, etc.)
-│   └── ticket_search.py
+├── tools/                # Agent tools (web search, task list, etc.)
+│   ├── ticket_search.py
+│   ├── job_search.py
+│   └── tasks.py
 ├── requirements.txt      # Python dependencies
 ├── .env.example         # Template for environment variables
 ├── .gitignore           # Git ignore rules
@@ -156,18 +165,20 @@ Once the bot is running, send messages to it on Telegram:
 
 - `/start` - Start the assistant
 - `/help` - Show available commands
+- `/reset` - Clear your conversation history (the shared task list is unaffected)
 - Any message - Get a response from the AI assistant
+- Ask it to add/list/complete a household task — it's shared across everyone in `AUTHORIZED_USERS`
 
 ## Security Notes
 
 - Never commit the `.env` file to version control
 - Keep your `GOOGLE_API_KEY` and `TELEGRAM_BOT_TOKEN` secret
-- The bot only responds to the user ID specified in `MY_TELEGRAM_USER_ID`
+- The bot only responds to user IDs listed in `AUTHORIZED_USERS`
 
 ## Troubleshooting
 
 ### Bot doesn't respond
-- Verify `MY_TELEGRAM_USER_ID` matches your actual user ID
+- Verify your Telegram user ID is listed in `AUTHORIZED_USERS`
 - Check that all environment variables are correctly set in `.env`
 - Ensure the bot token is valid
 

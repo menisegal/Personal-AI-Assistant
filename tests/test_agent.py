@@ -16,33 +16,40 @@ import sys
 load_dotenv()
 
 
+def _first_authorized_user_id() -> int:
+    """Extract the first Telegram user ID from AUTHORIZED_USERS ("id:Name,id:Name,...")."""
+    return int(os.getenv("AUTHORIZED_USERS", "").split(",")[0].split(":")[0])
+
+
 class TestEnvironmentSetup:
     """Test environment variables loading and validation."""
-    
+
     def test_env_vars_loaded(self):
         """Test that all required environment variables are available."""
         assert os.getenv("TELEGRAM_BOT_TOKEN") is not None, "TELEGRAM_BOT_TOKEN not set"
-        assert os.getenv("MY_TELEGRAM_USER_ID") is not None, "MY_TELEGRAM_USER_ID not set"
+        assert os.getenv("AUTHORIZED_USERS") is not None, "AUTHORIZED_USERS not set"
         assert os.getenv("GOOGLE_API_KEY") is not None, "GOOGLE_API_KEY not set"
-    
+
     def test_telegram_bot_token_not_empty(self):
         """Test that TELEGRAM_BOT_TOKEN is not empty."""
         token = os.getenv("TELEGRAM_BOT_TOKEN")
         assert token and len(token) > 0, "TELEGRAM_BOT_TOKEN is empty"
-    
+
     def test_google_api_key_not_empty(self):
         """Test that GOOGLE_API_KEY is not empty."""
         api_key = os.getenv("GOOGLE_API_KEY")
         assert api_key and len(api_key) > 0, "GOOGLE_API_KEY is empty"
-    
+
     def test_user_id_is_valid_integer(self):
-        """Test that MY_TELEGRAM_USER_ID can be converted to integer."""
-        user_id_str = os.getenv("MY_TELEGRAM_USER_ID")
-        try:
-            user_id = int(user_id_str)
-            assert user_id > 0, "User ID should be positive"
-        except ValueError:
-            pytest.fail(f"MY_TELEGRAM_USER_ID cannot be converted to integer: {user_id_str}")
+        """Test that each AUTHORIZED_USERS entry's user ID can be converted to integer."""
+        entries = os.getenv("AUTHORIZED_USERS", "").split(",")
+        for entry in entries:
+            uid_str = entry.split(":")[0]
+            try:
+                user_id = int(uid_str)
+                assert user_id > 0, "User ID should be positive"
+            except ValueError:
+                pytest.fail(f"AUTHORIZED_USERS entry has a non-integer user ID: {entry!r}")
 
 
 class TestSQLiteSetup:
@@ -74,7 +81,7 @@ class TestAuthorization:
     
     def test_authorized_user_id_matches(self):
         """Test that authorized user ID is correctly identified."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
         authorized_id = MY_TELEGRAM_USER_ID
         
         assert authorized_id == MY_TELEGRAM_USER_ID
@@ -82,14 +89,14 @@ class TestAuthorization:
     
     def test_unauthorized_user_rejected(self):
         """Test that unauthorized user ID is different from authorized ID."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
         unauthorized_id = MY_TELEGRAM_USER_ID + 12345
         
         assert unauthorized_id != MY_TELEGRAM_USER_ID
     
     def test_user_id_type_checking(self):
         """Test that user ID type validation works."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
         
         # Should be integer
         assert isinstance(MY_TELEGRAM_USER_ID, int)
@@ -104,7 +111,7 @@ class TestStartHandler:
     @pytest.mark.asyncio
     async def test_start_authorized_user(self):
         """Test /start command with authorized user."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
         
         # Mock the update object
         mock_update = AsyncMock()
@@ -128,7 +135,7 @@ class TestStartHandler:
     @pytest.mark.asyncio
     async def test_start_unauthorized_user(self):
         """Test /start command with unauthorized user."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
         
         # Mock update with unauthorized user ID
         mock_update = AsyncMock()
@@ -152,7 +159,7 @@ class TestHelpHandler:
     @pytest.mark.asyncio
     async def test_help_authorized_user(self):
         """Test /help command with authorized user."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
         
         mock_update = AsyncMock()
         mock_update.effective_user.id = MY_TELEGRAM_USER_ID
@@ -174,7 +181,7 @@ class TestHelpHandler:
     @pytest.mark.asyncio
     async def test_help_unauthorized_user(self):
         """Test /help command with unauthorized user."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
         
         mock_update = AsyncMock()
         mock_update.effective_user.id = MY_TELEGRAM_USER_ID + 99999
@@ -197,7 +204,7 @@ class TestResetHandler:
     @pytest.mark.asyncio
     async def test_reset_authorized_user_success(self):
         """Test /reset command successfully clears conversation."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
         
         # Create an in-memory database for testing, with the checkpoints
         # table created the same way SqliteSaver creates it in production
@@ -227,7 +234,7 @@ class TestResetHandler:
     @pytest.mark.asyncio
     async def test_reset_unauthorized_user(self):
         """Test /reset command with unauthorized user."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
         
         mock_update = AsyncMock()
         mock_update.effective_user.id = MY_TELEGRAM_USER_ID + 99999
@@ -250,7 +257,7 @@ class TestMessageHandler:
     @pytest.mark.asyncio
     async def test_handle_message_authorized_user(self):
         """Test message handling with authorized user."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
         
         mock_update = AsyncMock()
         mock_update.effective_user.id = MY_TELEGRAM_USER_ID
@@ -288,7 +295,7 @@ class TestMessageHandler:
     @pytest.mark.asyncio
     async def test_handle_message_unauthorized_user(self):
         """Test message handling with unauthorized user."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
         
         mock_update = AsyncMock()
         mock_update.effective_user.id = MY_TELEGRAM_USER_ID + 99999
@@ -308,7 +315,7 @@ class TestMessageHandler:
     @pytest.mark.asyncio
     async def test_handle_message_thread_id_generation(self):
         """Test that thread ID is correctly generated for message handling."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
         user_id_str = str(MY_TELEGRAM_USER_ID)
         expected_thread_id = f"chat_{user_id_str}"
         
@@ -322,7 +329,7 @@ class TestVoiceMessageHandler:
     @pytest.mark.asyncio
     async def test_handle_voice_authorized_user(self):
         """Test voice message handling with authorized user."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
 
         mock_update = AsyncMock()
         mock_update.effective_user.id = MY_TELEGRAM_USER_ID
@@ -368,7 +375,7 @@ class TestVoiceMessageHandler:
     @pytest.mark.asyncio
     async def test_handle_voice_unauthorized_user(self):
         """Test voice message handling with unauthorized user."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
 
         mock_update = AsyncMock()
         mock_update.effective_user.id = MY_TELEGRAM_USER_ID + 99999
@@ -388,7 +395,7 @@ class TestVoiceMessageHandler:
     @pytest.mark.asyncio
     async def test_handle_voice_download_failure(self):
         """Test voice message handling when downloading the audio fails."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
 
         mock_update = AsyncMock()
         mock_update.effective_user.id = MY_TELEGRAM_USER_ID
@@ -412,7 +419,7 @@ class TestVoiceMessageHandler:
     @pytest.mark.asyncio
     async def test_handle_voice_rejected_for_non_gemini_provider(self):
         """Test that voice messages are rejected with a clear message when not using Gemini."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
 
         mock_update = AsyncMock()
         mock_update.effective_user.id = MY_TELEGRAM_USER_ID
@@ -463,7 +470,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_handle_message_with_exception(self):
         """Test error handling when agent_executor raises exception."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
         
         mock_update = AsyncMock()
         mock_update.effective_user.id = MY_TELEGRAM_USER_ID
@@ -489,7 +496,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_handle_message_empty_response(self):
         """Test handling when agent returns empty response."""
-        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+        MY_TELEGRAM_USER_ID = _first_authorized_user_id()
         
         mock_update = AsyncMock()
         mock_update.effective_user.id = MY_TELEGRAM_USER_ID

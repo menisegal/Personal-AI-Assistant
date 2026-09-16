@@ -6,7 +6,7 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID", "0"))
+MY_TELEGRAM_USER_ID = int(os.getenv("AUTHORIZED_USERS", "0").split(",")[0].split(":")[0])
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id

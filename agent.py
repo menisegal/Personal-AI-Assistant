@@ -25,6 +25,7 @@ import langchain.agents
 
 from tools.ticket_search import search_event_tickets
 from tools.job_search import search_linkedin_jobs
+from tools.tasks import add_task, list_tasks, complete_task, delete_task
 
 # ============================================================================
 # LOGGING SETUP
@@ -45,7 +46,7 @@ load_dotenv()
 
 # Retrieve credentials from environment variables
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-MY_TELEGRAM_USER_ID_STR = os.getenv("MY_TELEGRAM_USER_ID")
+AUTHORIZED_USERS_STR = os.getenv("AUTHORIZED_USERS")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
@@ -61,8 +62,8 @@ VALID_LLM_PROVIDERS = ("gemini", "claude", "local")
 # Validate that all required environment variables are present
 if not TELEGRAM_BOT_TOKEN:
     raise ValueError("Missing TELEGRAM_BOT_TOKEN in .env file")
-if not MY_TELEGRAM_USER_ID_STR:
-    raise ValueError("Missing MY_TELEGRAM_USER_ID in .env file")
+if not AUTHORIZED_USERS_STR:
+    raise ValueError("Missing AUTHORIZED_USERS in .env file")
 if LLM_PROVIDER == "gemini" and not GOOGLE_API_KEY:
     raise ValueError("Missing GOOGLE_API_KEY in .env file (required when LLM_PROVIDER=gemini)")
 if LLM_PROVIDER == "claude" and not ANTHROPIC_API_KEY:
@@ -72,11 +73,25 @@ if LLM_PROVIDER == "local" and not LOCAL_LLM_MODEL_PATH:
 if LLM_PROVIDER not in VALID_LLM_PROVIDERS:
     raise ValueError(f"Invalid LLM_PROVIDER: {LLM_PROVIDER!r} (expected one of {VALID_LLM_PROVIDERS})")
 
-# Convert user ID to integer for comparison
-try:
-    MY_TELEGRAM_USER_ID = int(MY_TELEGRAM_USER_ID_STR)
-except ValueError:
-    raise ValueError(f"MY_TELEGRAM_USER_ID must be an integer, got: {MY_TELEGRAM_USER_ID_STR}")
+# AUTHORIZED_USERS format: "telegram_user_id:Name,telegram_user_id:Name"
+# e.g. "111111111:Alice,222222222:Bob" — maps each authorized Telegram
+# user ID to a display name, used both for the access check and so the agent
+# knows who it's talking to (e.g. for attributing shared household tasks).
+AUTHORIZED_USERS: dict[int, str] = {}
+for _entry in AUTHORIZED_USERS_STR.split(","):
+    _entry = _entry.strip()
+    if not _entry:
+        continue
+    _uid_str, _, _name = _entry.partition(":")
+    try:
+        AUTHORIZED_USERS[int(_uid_str.strip())] = _name.strip() or _uid_str.strip()
+    except ValueError:
+        raise ValueError(
+            f"Invalid entry in AUTHORIZED_USERS: {_entry!r} (expected 'telegram_user_id:Name')"
+        )
+
+if not AUTHORIZED_USERS:
+    raise ValueError("AUTHORIZED_USERS must contain at least one 'telegram_user_id:Name' entry")
 
 logger.info("✅ All environment variables loaded successfully")
 
@@ -123,10 +138,20 @@ else:
     logger.info("✅ ChatGoogleGenerativeAI initialized with gemini-3.6-flash")
 
 # System prompt that defines the agent's behavior and personality
-SYSTEM_PROMPT = """You are a personal smart assistant designed to help the user with a wide range of tasks.
+SYSTEM_PROMPT = """You are a personal smart assistant that helps a household with a wide range of tasks.
+More than one person may talk to you (each with their own private conversation), and each message
+starts with the sender's name in brackets, e.g. "[Alice] ...". Use that name naturally — for
+example when attributing a task to whoever added it — but never repeat the bracket back verbatim
+in your reply.
 You are intelligent, helpful, and always aim to provide accurate and thoughtful responses.
 You have access to various tools and can help with information retrieval, planning, analysis, and more.
 Be conversational, friendly, and adapt your tone to the user's needs.
+
+You manage a shared household to-do list with add_task, list_tasks, complete_task, and delete_task.
+This list is shared between everyone who talks to you, and — unlike the rest of this conversation —
+it is NOT cleared by /reset, so it's the right place for anything that should persist reliably
+(shopping lists, chores, reminders). Always pass the current sender's name as created_by when
+adding a task.
 
 You can search the web for tickets to sports games, shows, concerts, and other events using
 the search_event_tickets tool whenever the user asks about buying tickets or an event's schedule.
@@ -142,7 +167,7 @@ full posting (LinkedIn may require sign-in to see complete details).
 
 Important: Always maintain context from previous messages and build upon the conversation history."""
 
-AGENT_TOOLS = [search_event_tickets, search_linkedin_jobs]
+AGENT_TOOLS = [search_event_tickets, search_linkedin_jobs, add_task, list_tasks, complete_task, delete_task]
 
 # Create the ReAct agent with persistent SqliteSaver checkpointer
 # This ensures conversation history is saved to SQLite and restored on restart
@@ -168,7 +193,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     Only responds if the sender is the authorized user.
     """
     # Security check: only respond to authorized user
-    if update.effective_user.id != MY_TELEGRAM_USER_ID:
+    if update.effective_user.id not in AUTHORIZED_USERS:
         await update.message.reply_text("❌ Access denied.")
         logger.warning("Unauthorized access attempt from user: %s", update.effective_user.id)
         return
@@ -186,7 +211,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     Only responds if the sender is the authorized user.
     """
     # Security check: only respond to authorized user
-    if update.effective_user.id != MY_TELEGRAM_USER_ID:
+    if update.effective_user.id not in AUTHORIZED_USERS:
         await update.message.reply_text("❌ Access denied.")
         logger.warning("Unauthorized access attempt from user: %s", update.effective_user.id)
         return
@@ -214,7 +239,7 @@ async def reset_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     Only responds if the sender is the authorized user.
     """
     # Security check: only respond to authorized user
-    if update.effective_user.id != MY_TELEGRAM_USER_ID:
+    if update.effective_user.id not in AUTHORIZED_USERS:
         await update.message.reply_text("❌ Access denied.")
         logger.warning("Unauthorized access attempt from user: %s", update.effective_user.id)
         return
@@ -329,21 +354,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     Only responds if the sender is the authorized user.
     """
     # Security check: only respond to authorized user
-    if update.effective_user.id != MY_TELEGRAM_USER_ID:
+    if update.effective_user.id not in AUTHORIZED_USERS:
         await update.message.reply_text("❌ Access denied.")
         logger.warning("Unauthorized access attempt from user: %s", update.effective_user.id)
         return
 
     user_message = update.message.text
     user_id = str(update.effective_user.id)
+    sender_name = AUTHORIZED_USERS[update.effective_user.id]
     thread_id = f"chat_{user_id}"  # Persistent thread ID for conversation history
 
-    logger.info("Message received from user %s: %s...", user_id, user_message[:50])
+    logger.info("Message received from %s (%s): %s...", sender_name, user_id, user_message[:50])
 
     # Show typing indicator to indicate the bot is processing
     await update.message.chat.send_action("typing")
 
-    await run_agent_and_reply(update, user_id, thread_id, user_message)
+    await run_agent_and_reply(update, user_id, thread_id, f"[{sender_name}] {user_message}")
 
 
 async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -356,7 +382,7 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
     Only responds if the sender is the authorized user.
     """
     # Security check: only respond to authorized user
-    if update.effective_user.id != MY_TELEGRAM_USER_ID:
+    if update.effective_user.id not in AUTHORIZED_USERS:
         await update.message.reply_text("❌ Access denied.")
         logger.warning("Unauthorized access attempt from user: %s", update.effective_user.id)
         return
@@ -370,10 +396,11 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     user_id = str(update.effective_user.id)
+    sender_name = AUTHORIZED_USERS[update.effective_user.id]
     thread_id = f"chat_{user_id}"
     voice = update.message.voice
 
-    logger.info("Voice message received from user %s (%.1fs)", user_id, voice.duration)
+    logger.info("Voice message received from %s (%s) (%.1fs)", sender_name, user_id, voice.duration)
 
     # Show typing indicator to indicate the bot is processing
     await update.message.chat.send_action("typing")
@@ -392,7 +419,7 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
     content = [
         {
             "type": "text",
-            "text": "Listen to this voice message and respond to it as you would to a text message.",
+            "text": f"[{sender_name}] Listen to this voice message and respond to it as you would to a text message.",
         },
         {
             "type": "file",
@@ -434,7 +461,7 @@ def main() -> None:
     
     logger.info("✅ All handlers registered")
     logger.info("🚀 Starting bot polling... (Press Ctrl+C to stop)")
-    logger.info("Bot will only respond to user ID: %s", MY_TELEGRAM_USER_ID)
+    logger.info("Bot will only respond to authorized users: %s", AUTHORIZED_USERS)
     
     # Start polling for updates
     # This is a blocking call that keeps the bot running

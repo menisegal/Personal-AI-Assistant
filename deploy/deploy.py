@@ -70,16 +70,42 @@ def ssh_base_args(port: str, key: str) -> list:
     return args
 
 
+def _clear_windows_readonly(path: Path) -> None:
+    """
+    Clear the Windows read-only attribute recursively under `path`.
+
+    OneDrive-synced folders periodically get marked read-only during sync
+    reconciliation. tar (via Git Bash/MSYS) translates that into a restrictive
+    unix mode (e.g. dr-xr-xr-x) inside the archive, which then makes the
+    remote `tar xzf` extraction fail with "Cannot open: File exists" when
+    overwriting existing files. This is a no-op on non-Windows.
+    """
+    if sys.platform != "win32":
+        return
+    subprocess.run(
+        ["attrib", "-R", str(path), "/S", "/D"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+
+
 def sync_project(target: str, remote_path: str, ssh_args: list) -> None:
     """Stream a tar of the project (minus excludes) straight into the Pi over ssh."""
     print(f"[STEP] Syncing project files to {target}:{remote_path}")
+
+    _clear_windows_readonly(PROJECT_ROOT)
 
     tar_cmd = ["tar", "czf", "-"]
     for pattern in EXCLUDES:
         tar_cmd += ["--exclude", pattern]
     tar_cmd += ["-C", str(PROJECT_ROOT), "."]
 
-    remote_cmd = f"mkdir -p {remote_path} && tar xzf - -C {remote_path}"
+    # chmod defensively in case an earlier sync left read-only files/dirs on
+    # the Pi from a tarball that itself had restrictive modes (see above).
+    remote_cmd = (
+        f"mkdir -p {remote_path} && "
+        f"(chmod -R u+w {remote_path} 2>/dev/null || true) && "
+        f"tar xzf - -C {remote_path}"
+    )
     ssh_cmd = ["ssh"] + ssh_args + [target, remote_cmd]
 
     print(f"[RUN] {' '.join(tar_cmd)} | {' '.join(ssh_cmd)}")
