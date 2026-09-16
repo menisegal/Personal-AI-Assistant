@@ -361,6 +361,14 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.warning("Unauthorized access attempt from user: %s", update.effective_user.id)
         return
 
+    if LLM_PROVIDER != "gemini":
+        await update.message.reply_text(
+            "🎤 Voice messages are only supported with LLM_PROVIDER=gemini "
+            f"(current provider: {LLM_PROVIDER}). Please send a text message instead."
+        )
+        logger.info("Voice message rejected: unsupported for LLM_PROVIDER=%s", LLM_PROVIDER)
+        return
+
     user_id = str(update.effective_user.id)
     thread_id = f"chat_{user_id}"
     voice = update.message.voice

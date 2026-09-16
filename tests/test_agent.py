@@ -338,7 +338,8 @@ class TestVoiceMessageHandler:
         mock_context = AsyncMock()
         mock_context.bot.get_file = AsyncMock(return_value=mock_telegram_file)
 
-        with patch('agent.agent_executor') as mock_executor:
+        with patch('agent.agent_executor') as mock_executor, \
+             patch('agent.LLM_PROVIDER', 'gemini'):
             mock_executor.invoke = MagicMock(return_value={
                 "messages": [
                     MagicMock(content="I heard your voice message!")
@@ -402,10 +403,33 @@ class TestVoiceMessageHandler:
 
         from agent import handle_voice_message
 
-        await handle_voice_message(mock_update, mock_context)
+        with patch('agent.LLM_PROVIDER', 'gemini'):
+            await handle_voice_message(mock_update, mock_context)
 
         call_args = mock_update.message.reply_text.call_args[0][0]
         assert "error" in call_args.lower() or "❌" in call_args
+
+    @pytest.mark.asyncio
+    async def test_handle_voice_rejected_for_non_gemini_provider(self):
+        """Test that voice messages are rejected with a clear message when not using Gemini."""
+        MY_TELEGRAM_USER_ID = int(os.getenv("MY_TELEGRAM_USER_ID"))
+
+        mock_update = AsyncMock()
+        mock_update.effective_user.id = MY_TELEGRAM_USER_ID
+        mock_update.message.reply_text = AsyncMock()
+
+        mock_context = AsyncMock()
+
+        from agent import handle_voice_message
+
+        with patch('agent.LLM_PROVIDER', 'claude'):
+            await handle_voice_message(mock_update, mock_context)
+
+        # No download should have been attempted
+        mock_context.bot.get_file.assert_not_called()
+
+        call_args = mock_update.message.reply_text.call_args[0][0]
+        assert "gemini" in call_args.lower()
 
 
 class TestSystemPrompt:
