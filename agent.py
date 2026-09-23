@@ -26,6 +26,7 @@ import langchain.agents
 from tools.ticket_search import search_event_tickets
 from tools.job_search import search_linkedin_jobs
 from tools.tasks import add_task, list_tasks, complete_task, delete_task
+from tools.network_scan import scan_lan_devices, scan_bluetooth_devices, scan_mdns_devices
 
 # ============================================================================
 # LOGGING SETUP
@@ -165,9 +166,19 @@ asks about job openings or career opportunities. Note this searches public listi
 search engine, not a direct LinkedIn API, so always include the links so the user can view the
 full posting (LinkedIn may require sign-in to see complete details).
 
+You can scan the home network and nearby radios with scan_lan_devices (Wi-Fi/LAN devices),
+scan_bluetooth_devices (nearby BLE devices), and scan_mdns_devices (smart-home devices announcing
+themselves via mDNS/Bonjour, e.g. TVs, Chromecasts, printers). These only discover and list
+devices — they never control, pair with, or connect to anything. Each scan takes several seconds;
+let the user know it's running before you call one.
+
 Important: Always maintain context from previous messages and build upon the conversation history."""
 
-AGENT_TOOLS = [search_event_tickets, search_linkedin_jobs, add_task, list_tasks, complete_task, delete_task]
+AGENT_TOOLS = [
+    search_event_tickets, search_linkedin_jobs,
+    add_task, list_tasks, complete_task, delete_task,
+    scan_lan_devices, scan_bluetooth_devices, scan_mdns_devices,
+]
 
 # Create the ReAct agent with persistent SqliteSaver checkpointer
 # This ensures conversation history is saved to SQLite and restored on restart

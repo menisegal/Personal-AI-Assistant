@@ -6,6 +6,8 @@ langchain-anthropic==1.7.2
 langgraph~=1.2
 ddgs==9.16.0
 beautifulsoup4==4.15.0
+bleak==3.0.2
+zeroconf==0.151.3
 # langgraph-checkpoint-sqlite itself is installed separately via
 # requirements-no-deps.txt (see that file for why). aiosqlite is its only
 # real runtime dependency.

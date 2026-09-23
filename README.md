@@ -11,6 +11,7 @@ A personal Telegram bot powered by Google's Gemini AI, built with LangGraph for 
 - 🎤 **Voice Messages**: Send voice notes, transcribed and understood natively by Gemini
 - 🎫 **Event Ticket Search**: Ask about tickets for a game, concert, or show — the agent searches the web and reads real ticket pages for prices and links
 - 💼 **Job Search**: Ask about LinkedIn job openings — searched via a public search engine, no LinkedIn login required
+- 📡 **Home Network Discovery**: Ask what's on the Wi-Fi/LAN, nearby via Bluetooth, or announcing itself via mDNS — discovery only, no device control
 - 🔐 **Secure**: Credentials managed via environment variables, not hardcoded
 - 🚀 **Lightweight**: Can run on Raspberry Pi or any Python-compatible machine
 
@@ -145,10 +146,11 @@ ssh pi@raspberrypi.local sudo journalctl -u personal-ai-assistant -f
 ```
 Personal-AI-Assistant/
 ├── agent.py              # Main bot logic
-├── tools/                # Agent tools (web search, task list, etc.)
+├── tools/                # Agent tools (web search, task list, network scans, etc.)
 │   ├── ticket_search.py
 │   ├── job_search.py
-│   └── tasks.py
+│   ├── tasks.py
+│   └── network_scan.py
 ├── requirements.txt      # Python dependencies
 ├── .env.example         # Template for environment variables
 ├── .gitignore           # Git ignore rules
