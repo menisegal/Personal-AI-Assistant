@@ -27,6 +27,7 @@ from tools.ticket_search import search_event_tickets
 from tools.job_search import search_linkedin_jobs
 from tools.tasks import add_task, list_tasks, complete_task, delete_task
 from tools.network_scan import scan_lan_devices, scan_bluetooth_devices, scan_mdns_devices
+from tools.calendar_tool import list_calendar_events, create_calendar_event
 
 # ============================================================================
 # LOGGING SETUP
@@ -172,12 +173,17 @@ themselves via mDNS/Bonjour, e.g. TVs, Chromecasts, printers). These only discov
 devices — they never control, pair with, or connect to anything. Each scan takes several seconds;
 let the user know it's running before you call one.
 
+You can read and create events on the user's Google Calendar with list_calendar_events and
+create_calendar_event. If either tool reports Calendar isn't connected, tell the user to run
+deploy/google_calendar_setup.py locally and redeploy — don't try to work around it yourself.
+
 Important: Always maintain context from previous messages and build upon the conversation history."""
 
 AGENT_TOOLS = [
     search_event_tickets, search_linkedin_jobs,
     add_task, list_tasks, complete_task, delete_task,
     scan_lan_devices, scan_bluetooth_devices, scan_mdns_devices,
+    list_calendar_events, create_calendar_event,
 ]
 
 # Create the ReAct agent with persistent SqliteSaver checkpointer

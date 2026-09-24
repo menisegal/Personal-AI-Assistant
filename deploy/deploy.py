@@ -127,6 +127,20 @@ def copy_env_file(target: str, remote_path: str, scp_args: list) -> None:
     run(["scp"] + scp_args + [str(env_path), f"{target}:{remote_path}/.env"])
 
 
+def copy_calendar_token(target: str, remote_path: str, scp_args: list) -> None:
+    """Sync token.json (Google Calendar OAuth token) if it exists locally.
+
+    Produced by deploy/google_calendar_setup.py, which must be run locally
+    on a machine with a browser — the Pi never runs the OAuth consent flow
+    itself. Silently does nothing if Calendar hasn't been set up.
+    """
+    token_path = PROJECT_ROOT / "token.json"
+    if not token_path.exists():
+        return
+    print("[STEP] Copying Google Calendar token to the Pi")
+    run(["scp"] + scp_args + [str(token_path), f"{target}:{remote_path}/token.json"])
+
+
 def remote_setup(target: str, remote_path: str, ssh_args: list, python_bin: str, local_llm: bool) -> None:
     print(f"[STEP] Creating/updating virtual environment (using {python_bin}) and installing dependencies on the Pi")
     remote_cmd = (
@@ -239,6 +253,7 @@ def main():
             sync_project(target, args.path, ssh_args)
             if not args.skip_env:
                 copy_env_file(target, args.path, scp_args)
+                copy_calendar_token(target, args.path, scp_args)
 
         remote_setup(target, args.path, ssh_args, args.python_bin, args.local_llm)
 

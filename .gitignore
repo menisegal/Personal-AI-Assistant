@@ -32,3 +32,7 @@ memory.db
 # Deploy tool local config (contains SSH connection details)
 deploy/deploy.env
 deploy/*.service
+
+# Google Calendar OAuth credentials/token
+credentials.json
+token.json

@@ -12,6 +12,7 @@ A personal Telegram bot powered by Google's Gemini AI, built with LangGraph for 
 - 🎫 **Event Ticket Search**: Ask about tickets for a game, concert, or show — the agent searches the web and reads real ticket pages for prices and links
 - 💼 **Job Search**: Ask about LinkedIn job openings — searched via a public search engine, no LinkedIn login required
 - 📡 **Home Network Discovery**: Ask what's on the Wi-Fi/LAN, nearby via Bluetooth, or announcing itself via mDNS — discovery only, no device control
+- 📅 **Google Calendar**: Read upcoming events and create new ones (one-time OAuth setup, see below)
 - 🔐 **Secure**: Credentials managed via environment variables, not hardcoded
 - 🚀 **Lightweight**: Can run on Raspberry Pi or any Python-compatible machine
 
@@ -115,6 +116,28 @@ Useful flags: `--path` (remote directory, must be absolute for `--service`), `--
 system `python3` is too old), `--local-llm` (also install `requirements-local-llm.txt` for
 running a local model — see below).
 
+### Connecting Google Calendar
+
+The agent can read and create events on your Google Calendar. One-time setup, done locally
+on a machine with a browser (never on the Pi):
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create/select a project and
+   enable the **Google Calendar API**.
+2. Configure the OAuth consent screen (External user type is fine for personal use; add your
+   own Google account as a test user).
+3. Create an OAuth **Client ID** of type **Desktop app**, download the JSON, and save it as
+   `credentials.json` in the project root (next to `agent.py`).
+4. Run:
+   ```bash
+   python deploy/google_calendar_setup.py
+   ```
+   This opens a browser for you to log in and grant access, then saves `token.json`.
+5. (Optional) Set `CALENDAR_TIMEZONE` in `.env` (e.g. `Asia/Jerusalem`) — defaults to UTC.
+6. Deploy as usual (`python deploy/deploy.py --service`) — `token.json` is synced automatically
+   alongside `.env`. Re-run step 4 any time you need to re-authorize.
+
+`credentials.json` and `token.json` are gitignored — never commit them.
+
 ### Using Claude instead of Gemini
 
 Set `LLM_PROVIDER=claude` and `ANTHROPIC_API_KEY=your_key` in `.env` to run the bot on
@@ -146,17 +169,19 @@ ssh pi@raspberrypi.local sudo journalctl -u personal-ai-assistant -f
 ```
 Personal-AI-Assistant/
 ├── agent.py              # Main bot logic
-├── tools/                # Agent tools (web search, task list, network scans, etc.)
+├── tools/                # Agent tools (web search, task list, network scans, calendar, etc.)
 │   ├── ticket_search.py
 │   ├── job_search.py
 │   ├── tasks.py
-│   └── network_scan.py
+│   ├── network_scan.py
+│   └── calendar_tool.py
 ├── requirements.txt      # Python dependencies
 ├── .env.example         # Template for environment variables
 ├── .gitignore           # Git ignore rules
 ├── deploy/              # Raspberry Pi deploy tool (see Deployment section)
 │   ├── deploy.py
 │   ├── deploy.env.example
+│   ├── google_calendar_setup.py
 │   └── personal-ai-assistant.service.template
 └── README.md            # This file
 ```
