@@ -1,0 +1,11 @@
+# Only needed for tools/calendar_tool.py (Google Calendar integration).
+# Not in requirements.txt because this dependency chain pulls in
+# `cryptography`, whose piwheels-built wheel for this Pi's armv7 Python 3.11
+# needs libffi.so.8 — unavailable on Bullseye (only libffi.so.7 is present).
+# Install locally with: pip install -r requirements-calendar.txt
+# To use on the Pi, cryptography will need to be built from source with a
+# Rust toolchain first (tracked separately) — installing this file as-is on
+# the Pi will pull in the same broken wheel and crash the bot on import.
+google-api-python-client==2.200.0
+google-auth-oauthlib==1.4.1
+google-auth-httplib2==0.4.2

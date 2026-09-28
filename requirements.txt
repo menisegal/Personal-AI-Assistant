@@ -8,9 +8,13 @@ ddgs==9.16.0
 beautifulsoup4==4.15.0
 bleak==3.0.2
 zeroconf==0.151.3
-google-api-python-client==2.200.0
-google-auth-oauthlib==1.4.1
-google-auth-httplib2==0.4.2
+# google-api-python-client, google-auth-oauthlib, google-auth-httplib2 (for
+# tools/calendar_tool.py) are temporarily NOT installed here — their
+# dependency chain pulls in a `cryptography` build that needs libffi.so.8,
+# unavailable on this Pi's Bullseye base (only libffi.so.7). See
+# requirements-calendar.txt and the note in agent.py where the tool's
+# import is commented out. Re-enable once cryptography is built from
+# source with a Rust toolchain.
 # langgraph-checkpoint-sqlite itself is installed separately via
 # requirements-no-deps.txt (see that file for why). aiosqlite is its only
 # real runtime dependency.
